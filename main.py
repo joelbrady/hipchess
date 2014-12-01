@@ -3,6 +3,8 @@ import sqlite3
 import requests
 import base64
 import json
+import os
+import sys
 import re
 import time
 
@@ -13,17 +15,24 @@ from view import render
 from model import ChessGame, InvalidMove
 
 BASE_URL = 'http://joshnelson.com.au:4321/'
+DB_FILE = 'chess.db'
 
 MOVE_COMMAND = '/chess move'
 RESTART_COMMAND = '/chess restart'
 VIEW_COMMAND = '/chess view'
 HELP_COMMAND = '/chess help'
 
-db = sqlite3.connect('chess.db')
+if not os.path.exists(DB_FILE):
+    print >> sys.stderr, 'Database does not exist!'
+    sys.exit(1)
+
+db = sqlite3.connect(DB_FILE)
+
 
 @route('/static/<filename>')
 def server_static(filename):
     return static_file(filename, root='static')
+
 
 @post('/message')
 def room():
@@ -62,10 +71,13 @@ def room():
                 '<li><code>/chess view</code>: View the current state of the game</li>' +
             '</ul>' +
             'Repository URL: <a href="https://github.com/cyberdash/hipchess">https://github.com/cyberdash/hipchess</a>'
-        , room_id)
+            , room_id)
+
 
 def send_board_image(room_id):
-    send_message('<img src="' + BASE_URL + 'game/' + room_id + '.png"></img>', room_id)
+    send_message('<img src="' + BASE_URL + 'game/' + room_id + '.png"></img>',
+                 room_id)
+
 
 @post('/installable')
 def install():
@@ -80,6 +92,7 @@ def install():
 
     db.commit()
 
+
 @get('/game/<room_id>.png')
 def render_game(room_id):
     game = ChessGame(room_id)
@@ -91,8 +104,8 @@ def render_game(room_id):
 
     return static_file(image_path, root='.')
 
-def send_message(message, room_id):
 
+def send_message(message, room_id):
     token = authorize_by_room(room_id)
     print 'Sending message with token: ' + str(token)
     message_params = {
@@ -106,7 +119,9 @@ def send_message(message, room_id):
         json=message_params
     )
 
+
 token_cache = {}
+
 
 def authorize(oauth_id, oauth_secret):
 
@@ -120,7 +135,8 @@ def authorize(oauth_id, oauth_secret):
 
     oauth_headers = {
         'content-type': 'application/x-www-form-urlencoded',
-        'Authorization': 'Basic ' + base64.b64encode(str(oauth_id) + ':' + str(oauth_secret))
+        'Authorization': 'Basic ' + base64.b64encode(
+            str(oauth_id) + ':' + str(oauth_secret))
     }
     webhook_oauth_request = requests.post(
         'http://api.hipchat.com/v2/oauth/token',
@@ -145,5 +161,6 @@ def authorize(oauth_id, oauth_secret):
 def authorize_by_room(room_id):
     (_, oauth_id, oauth_secret) = db.execute('SELECT * FROM rooms WHERE room = ?', (room_id,)).fetchone()
     return authorize(oauth_id, oauth_secret)
+
 
 run(host='0.0.0.0', port=4321)
